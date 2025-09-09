@@ -619,6 +619,7 @@ class MakefileGenerator:
         self.ldlibs: UniqueList = UniqueList()  # link libraries
         self.ldflags: UniqueList = UniqueList()  # linker flags + link_dirs
         self.targets: UniqueList = UniqueList()  # targets
+        self.pattern_rules: UniqueList = UniqueList()  # pattern rules (e.g., %.o: %.cpp)
         self.phony: UniqueList = UniqueList()  # phony targets
         self.clean: UniqueList = UniqueList()  # clean target
         # writer
@@ -751,6 +752,20 @@ class MakefileGenerator:
             raise ValueError(f"target: '{_target}' already exists in `targets` list")
         self.targets.append(_target)
 
+    def add_pattern_rule(self, target_pattern: str, source_pattern: str, recipe: str):
+        """Add a pattern rule to the Makefile (e.g., %.o: %.cpp)"""
+        if not target_pattern or not source_pattern or not recipe:
+            raise ValueError("target_pattern, source_pattern, and recipe are all required")
+        if '%' not in target_pattern:
+            raise ValueError("target_pattern must contain '%' wildcard")
+        if '%' not in source_pattern:
+            raise ValueError("source_pattern must contain '%' wildcard")
+        
+        pattern_rule = f"{target_pattern}: {source_pattern}\n\t{recipe}"
+        if pattern_rule in self.pattern_rules:
+            raise ValueError(f"pattern rule: '{pattern_rule}' already exists")
+        self.pattern_rules.append(pattern_rule)
+
     def add_phony(self, *entries):
         """Add phony targets to the Makefile"""
         for entry in entries:
@@ -825,6 +840,14 @@ class MakefileGenerator:
             self.write(f".PHONY: {phone_targets}")
             self.write()
 
+    def _write_pattern_rules(self) -> None:
+        """Write pattern rules to the Makefile"""
+        if self.pattern_rules:
+            self.write("# Pattern rules")
+            for pattern_rule in self.pattern_rules:
+                self.write(pattern_rule)
+                self.write()
+
     def _write_targets(self) -> None:
         """Write targets to the Makefile"""
         for target in sorted(self.targets):
@@ -843,6 +866,7 @@ class MakefileGenerator:
         self._setup_defaults()
         self._write_variables()
         self._write_phony()
+        self._write_pattern_rules()
         self._write_targets()
         self._write_clean()
         self.close()
@@ -947,6 +971,17 @@ def cmd_makefile(args) -> None:
             recipe = parts[2].strip() if len(parts) > 2 and parts[2].strip() else None
             generator.add_target(name, recipe, deps)
     
+    # Add pattern rules
+    if args.pattern_rules:
+        for pattern_def in args.pattern_rules:
+            parts = pattern_def.split(':', 2)
+            if len(parts) != 3:
+                raise ValueError(f"Pattern rule must have format 'target_pattern:source_pattern:recipe', got: {pattern_def}")
+            target_pattern = parts[0].strip()
+            source_pattern = parts[1].strip()
+            recipe = parts[2].strip()
+            generator.add_pattern_rule(target_pattern, source_pattern, recipe)
+    
     # Add phony targets
     if args.phony:
         generator.add_phony(*args.phony)
@@ -974,10 +1009,14 @@ Examples:
   %(prog)s build myprogram --cppfiles main.cpp \\
     --cxxflags "-O2" "-Wall" "-std=c++17" --dry-run
   
-  # Generate Makefile
+  # Generate Makefile with pattern rules
   %(prog)s makefile -o Makefile \\
     --include-dirs /usr/local/include --ldlibs pthread \\
+    --pattern-rules "%%.o:%%.cpp:$(CXX) $(CXXFLAGS) -c $< -o $@" \\
     --targets "all:build test:" --targets "build:main.o:$(CXX) -o $@ $^"
+
+    When using Makefile-type variables and patters via the commandline
+    Escap dollars with a backslash.
         """
     )
     
@@ -1010,6 +1049,7 @@ Examples:
     makefile_parser.add_argument('-l', '--ldlibs', nargs='*', help='Link libraries')
     makefile_parser.add_argument('-D', '--variables', nargs='*', help='Variables (KEY=VALUE format)')
     makefile_parser.add_argument('-t', '--targets', nargs='*', help='Targets (name:deps:recipe format)')
+    makefile_parser.add_argument('-p', '--pattern-rules', nargs='*', help='Pattern rules (target_pattern:source_pattern:recipe format)')
     makefile_parser.add_argument('--phony', nargs='*', help='Phony target names')
     makefile_parser.add_argument('--clean', nargs='*', help='Clean patterns/files')
     makefile_parser.set_defaults(func=cmd_makefile)
@@ -1070,6 +1110,7 @@ if __name__ == "__main__":
             )
             m.add_target("test", "echo $(TEST)", deps=["test.o"])
             m.add_target("dump", "$(make_echos)")
+            m.add_pattern_rule("%%.o", "%%.cpp", "$(CXX) $(CXXFLAGS) -c $< -o $@")
             m.add_phony("all", "build", "test", "dump")
             m.add_clean("test.o", "*.o")
             m.generate()
