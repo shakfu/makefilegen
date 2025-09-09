@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """makefilegen: makefile generator
 
 Makefile generator / direct compilation tool,
@@ -6,6 +7,7 @@ as this generic part of the code may be generally useful.
 https://github.com/shedskin/shedskin
 """
 
+import argparse
 import os
 import platform
 import re
@@ -13,9 +15,9 @@ import shutil
 import subprocess
 import sys
 import sysconfig
-import subprocess
 from pathlib import Path
 from typing import Any, Callable, Optional, TypeAlias
+
 
 # type aliases
 PathLike: TypeAlias = Path | str
@@ -48,6 +50,56 @@ def check_output(cmd: str) -> Optional[str]:
         return subprocess.check_output(cmd.split(), encoding="utf8").strip()
     except FileNotFoundError:
         return None
+
+# -----------------------------------------------------------------------------
+# utility classes
+
+
+class UniqueList(list):
+    """A list subclass of unique elements."""
+    
+    def __init__(self, iterable=None):
+        """Initialize UniqueList, ensuring all elements are unique."""
+        super().__init__()
+        if iterable is not None:
+            for item in iterable:
+                self.add(item)
+
+    def __repr__(self):
+        """Custom representation showing it's a UniqueList."""
+        return f"UniqueList({super().__repr__()})"
+
+    def add(self, item):
+        """Add an item only if it's not already in the list."""
+        if item not in self:
+            self.append(item)
+        return self
+    
+    def append(self, item):
+        """Override append to maintain uniqueness."""
+        if item not in self:
+            super().append(item)
+    
+    def extend(self, iterable):
+        """Override extend to maintain uniqueness."""
+        for item in iterable:
+            self.add(item)
+    
+    def insert(self, index, item):
+        """Override insert to maintain uniqueness."""
+        if item not in self:
+            super().insert(index, item)
+    
+    def __iadd__(self, other):
+        """Override += operator to maintain uniqueness."""
+        self.extend(other)
+        return self
+    
+    def __add__(self, other):
+        """Override + operator to return a new UniqueList."""
+        result = UniqueList(self)
+        result.extend(other)
+        return result
 
 # -----------------------------------------------------------------------------
 # variable classes
@@ -254,16 +306,16 @@ class Builder:
         self.strict = strict  # raise error if entry already exists
         self._cc = "gcc"
         self._cxx = "g++"
-        self._cppfiles: list[str] = []
-        self._hppfiles: list[str] = []
-        self._include_dirs: list[str] = []  # include directories
-        self._cflags: list[str] = []  # c compiler flags
-        self._cxxflags: list[str] = []  # c++ compiler flags
-        self._link_dirs: list[str] = []  # link directories
-        self._ldlibs: list[str] = []  # link libraries
-        self._ldflags: list[str] = []  # linker flags + link_dirs
-        self._cleanup_patterns: list[str] = []  # post-build cleanup by glob pattern
-        self._cleanup_targets: list[str] = []  # post-build cleanup by path
+        self._cppfiles: UniqueList = UniqueList()
+        self._hppfiles: UniqueList = UniqueList()
+        self._include_dirs: UniqueList = UniqueList()  # include directories
+        self._cflags: UniqueList = UniqueList()  # c compiler flags
+        self._cxxflags: UniqueList = UniqueList()  # c++ compiler flags
+        self._link_dirs: UniqueList = UniqueList()  # link directories
+        self._ldlibs: UniqueList = UniqueList()  # link libraries
+        self._ldflags: UniqueList = UniqueList()  # linker flags + link_dirs
+        self._cleanup_patterns: UniqueList = UniqueList()  # post-build cleanup by glob pattern
+        self._cleanup_targets: UniqueList = UniqueList()  # post-build cleanup by path
 
     @property
     def cc(self) -> str:
@@ -286,104 +338,104 @@ class Builder:
         self._cxx = value
 
     @property
-    def cppfiles(self) -> list[str]:
+    def cppfiles(self) -> UniqueList:
         """c++ files"""
         return self._cppfiles
 
     @cppfiles.setter
     def cppfiles(self, value: list[str]) -> None:
         """set c++ files"""
-        self._cppfiles = value
+        self._cppfiles = UniqueList(value)
 
     @property
-    def hppfiles(self) -> list[str]:
+    def hppfiles(self) -> UniqueList:
         """hpp files"""
         return self._hppfiles
 
     @hppfiles.setter
     def hppfiles(self, value: list[str]) -> None:
         """set hpp files"""
-        self._hppfiles = value
+        self._hppfiles = UniqueList(value)
 
     @property
-    def include_dirs(self) -> list[str]:
+    def include_dirs(self) -> UniqueList:
         """include directories"""
         return self._include_dirs
 
     @include_dirs.setter
     def include_dirs(self, value: list[str]) -> None:
         """set include directories"""
-        self._include_dirs = value
+        self._include_dirs = UniqueList(value)
 
     @property
-    def cflags(self) -> list[str]:
+    def cflags(self) -> UniqueList:
         """c compiler flags"""
         return self._cflags
 
     @cflags.setter
     def cflags(self, value: list[str]) -> None:
         """set c compiler flags"""
-        self._cflags = value
+        self._cflags = UniqueList(value)
 
     @property
-    def cxxflags(self) -> list[str]:
+    def cxxflags(self) -> UniqueList:
         """c++ compiler flags"""
         return self._cxxflags
 
     @cxxflags.setter
     def cxxflags(self, value: list[str]) -> None:
         """set c++ compiler flags"""
-        self._cxxflags = value
+        self._cxxflags = UniqueList(value)
 
     @property
-    def link_dirs(self) -> list[str]:
+    def link_dirs(self) -> UniqueList:
         """link directories"""
         return self._link_dirs
 
     @link_dirs.setter
     def link_dirs(self, value: list[str]) -> None:
         """set link directories"""
-        self._link_dirs = value
+        self._link_dirs = UniqueList(value)
 
     @property
-    def ldlibs(self) -> list[str]:
+    def ldlibs(self) -> UniqueList:
         """link libraries"""
         return self._ldlibs
 
     @ldlibs.setter
     def ldlibs(self, value: list[str]) -> None:
         """set link libraries"""
-        self._ldlibs = value
+        self._ldlibs = UniqueList(value)
 
     @property
-    def ldflags(self) -> list[str]:
+    def ldflags(self) -> UniqueList:
         """linker flags"""
         return self._ldflags
 
     @ldflags.setter
     def ldflags(self, value: list[str]) -> None:
         """set linker flags"""
-        self._ldflags = value
+        self._ldflags = UniqueList(value)
 
     @property
-    def cleanup_patterns(self) -> list[str]:
+    def cleanup_patterns(self) -> UniqueList:
         """cleanup post-build by glob pattern"""
         return self._cleanup_patterns
 
     @cleanup_patterns.setter
     def cleanup_patterns(self, value: list[str]) -> None:
         """set cleanup post-build by glob pattern"""
-        self._cleanup_patterns = value
+        self._cleanup_patterns = UniqueList(value)
 
     @property
-    def cleanup_targets(self) -> list[str]:
+    def cleanup_targets(self) -> UniqueList:
         """cleanup post-build by path"""
         return self._cleanup_targets
 
     @cleanup_targets.setter
     def cleanup_targets(self, value: list[str]) -> None:
         """set cleanup post-build by path"""
-        self._cleanup_targets = value
+        self._cleanup_targets = UniqueList(value)
 
     @property
     def build_cmd(self) -> str:
@@ -559,16 +611,16 @@ class MakefileGenerator:
         self.strict = strict  # raise error if variable or entry already exists
         self.cxx = "g++"
         self.vars: dict[str, PathLike] = {}  # variables
-        self.var_order: list[str] = []  # write order of variables
-        self.include_dirs: list[str] = []  # include directories
-        self.cflags: list[str] = []  # c compiler flags
-        self.cxxflags: list[str] = []  # c++ compiler flags
-        self.link_dirs: list[str] = []  # link directories
-        self.ldlibs: list[str] = []  # link libraries
-        self.ldflags: list[str] = []  # linker flags + link_dirs
-        self.targets: list[str] = []  # targets
-        self.phony: list[str] = []  # phony targets
-        self.clean: list[str] = []  # clean target
+        self.var_order: UniqueList = UniqueList()  # write order of variables
+        self.include_dirs: UniqueList = UniqueList()  # include directories
+        self.cflags: UniqueList = UniqueList()  # c compiler flags
+        self.cxxflags: UniqueList = UniqueList()  # c++ compiler flags
+        self.link_dirs: UniqueList = UniqueList()  # link directories
+        self.ldlibs: UniqueList = UniqueList()  # link libraries
+        self.ldflags: UniqueList = UniqueList()  # linker flags + link_dirs
+        self.targets: UniqueList = UniqueList()  # targets
+        self.phony: UniqueList = UniqueList()  # phony targets
+        self.clean: UniqueList = UniqueList()  # clean target
         # writer
         self.writer = MakefileWriter(path)
 
@@ -609,11 +661,11 @@ class MakefileGenerator:
         home = os.path.expanduser("~")
         return path.replace(cwd, "$(CURDIR)").replace(home, "$(HOME)")
 
-    def _normalize_paths(self, filenames: list[str]) -> list[str]:
+    def _normalize_paths(self, filenames: UniqueList) -> UniqueList:
         """Replace filenames with current directory"""
         cwd = os.getcwd()
         home = os.path.expanduser("~")
-        return [f.replace(cwd, "$(CURDIR)").replace(home, "$(HOME)") for f in filenames]
+        return UniqueList([f.replace(cwd, "$(CURDIR)").replace(home, "$(HOME)") for f in filenames])
 
     def _add_entry_or_variable(
         self,
@@ -717,7 +769,7 @@ class MakefileGenerator:
             "$(CURDIR)"
         )  # CURDIR is absolute path to the current directory
 
-    def _write_filelist(self, name: str, files: list[str]) -> None:
+    def _write_filelist(self, name: str, files: UniqueList) -> None:
         """Write a file list to the Makefile"""
         if not files:
             return
@@ -796,42 +848,231 @@ class MakefileGenerator:
         self.close()
 
 
+# -----------------------------------------------------------------------------
+# CLI functionality
+
+def cmd_build(args) -> None:
+    """Build command using Builder class"""
+    builder = Builder(args.target)
+    
+    if args.cc:
+        builder.cc = args.cc
+    if args.cxx:
+        builder.cxx = args.cxx
+    if args.cppfiles:
+        builder.add_cppfiles(*args.cppfiles)
+    if args.include_dirs:
+        builder.add_include_dirs(*args.include_dirs)
+    if args.cflags:
+        builder.add_cflags(*args.cflags)
+    if args.cxxflags:
+        # Handle comma-separated flags or individual flags  
+        flags = []
+        for flag_group in args.cxxflags:
+            if ',' in flag_group:
+                flags.extend(flag_group.split(','))
+            else:
+                flags.append(flag_group)
+        builder.add_cxxflags(*flags)
+    if args.link_dirs:
+        builder.add_link_dirs(*args.link_dirs)
+    if args.ldflags:
+        builder.add_ldflags(*args.ldflags)
+    if args.ldlibs:
+        builder.add_ldlibs(*args.ldlibs)
+    
+    builder.build(dry_run=args.dry_run)
+
+
+def cmd_makefile(args) -> None:
+    """Generate Makefile using MakefileGenerator class"""
+    generator = MakefileGenerator(args.output)
+    
+    if args.cxx:
+        generator.cxx = args.cxx
+    if args.include_dirs:
+        generator.add_include_dirs(*args.include_dirs)
+    if args.cflags:
+        # Handle comma-separated flags or individual flags
+        flags = []
+        for flag_group in args.cflags:
+            if ',' in flag_group:
+                flags.extend(flag_group.split(','))
+            else:
+                flags.append(flag_group)
+        generator.add_cflags(*flags)
+    if args.cxxflags:
+        # Handle comma-separated flags or individual flags
+        flags = []
+        for flag_group in args.cxxflags:
+            if ',' in flag_group:
+                flags.extend(flag_group.split(','))
+            else:
+                flags.append(flag_group)
+        generator.add_cxxflags(*flags)
+    if args.link_dirs:
+        generator.add_link_dirs(*args.link_dirs)
+    if args.ldflags:
+        # Handle comma-separated flags or individual flags
+        flags = []
+        for flag_group in args.ldflags:
+            if ',' in flag_group:
+                flags.extend(flag_group.split(','))
+            else:
+                flags.append(flag_group)
+        generator.add_ldflags(*flags)
+    if args.ldlibs:
+        # Handle comma-separated libraries or individual libraries
+        libs = []
+        for lib_group in args.ldlibs:
+            if ',' in lib_group:
+                libs.extend(lib_group.split(','))
+            else:
+                libs.append(lib_group)
+        generator.add_ldlibs(*libs)
+    
+    # Add variables
+    if args.variables:
+        for var_def in args.variables:
+            if '=' in var_def:
+                key, value = var_def.split('=', 1)
+                generator.add_variable(key.strip(), value.strip())
+    
+    # Add targets
+    if args.targets:
+        for target_def in args.targets:
+            parts = target_def.split(':', 2)
+            name = parts[0].strip()
+            deps = parts[1].strip().split() if len(parts) > 1 and parts[1].strip() else None
+            recipe = parts[2].strip() if len(parts) > 2 and parts[2].strip() else None
+            generator.add_target(name, recipe, deps)
+    
+    # Add phony targets
+    if args.phony:
+        generator.add_phony(*args.phony)
+    
+    # Add clean patterns
+    if args.clean:
+        generator.add_clean(*args.clean)
+    
+    generator.generate()
+    print(f"Generated Makefile: {args.output}")
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create CLI argument parser"""
+    parser = argparse.ArgumentParser(
+        description="Makefile generator / direct compilation tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Direct compilation
+  %(prog)s build myprogram --cppfiles main.cpp utils.cpp \\
+    --include-dirs /usr/local/include --ldlibs pthread
+  
+  # Build with compiler flags (quote flags with spaces/dashes)
+  %(prog)s build myprogram --cppfiles main.cpp \\
+    --cxxflags "-O2" "-Wall" "-std=c++17" --dry-run
+  
+  # Generate Makefile
+  %(prog)s makefile -o Makefile \\
+    --include-dirs /usr/local/include --ldlibs pthread \\
+    --targets "all:build test:" --targets "build:main.o:$(CXX) -o $@ $^"
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Build command
+    build_parser = subparsers.add_parser('build', help='Direct compilation using Builder')
+    build_parser.add_argument('target', help='Output target name')
+    build_parser.add_argument('-c', '--cppfiles', nargs='*', help='C++ source files')
+    build_parser.add_argument('--cc', help='C compiler (default: gcc)')
+    build_parser.add_argument('--cxx', help='C++ compiler (default: g++)')
+    build_parser.add_argument('-I', '--include-dirs', nargs='*', help='Include directories')
+    build_parser.add_argument('--cflags', nargs='*', help='C compiler flags (space-separated)')
+    build_parser.add_argument('--cxxflags', nargs='*', help='C++ compiler flags (space-separated)')
+    build_parser.add_argument('-L', '--link-dirs', nargs='*', help='Link directories')
+    build_parser.add_argument('--ldflags', nargs='*', help='Linker flags (space-separated)')
+    build_parser.add_argument('-l', '--ldlibs', nargs='*', help='Link libraries (space-separated)')
+    build_parser.add_argument('--dry-run', action='store_true', help='Show command without executing')
+    build_parser.set_defaults(func=cmd_build)
+    
+    # Makefile command
+    makefile_parser = subparsers.add_parser('makefile', help='Generate Makefile using MakefileGenerator')
+    makefile_parser.add_argument('-o', '--output', default='Makefile', help='Output Makefile path')
+    makefile_parser.add_argument('--cxx', help='C++ compiler (default: g++)')
+    makefile_parser.add_argument('-I', '--include-dirs', nargs='*', help='Include directories')
+    makefile_parser.add_argument('--cflags', nargs='*', help='C compiler flags')
+    makefile_parser.add_argument('--cxxflags', nargs='*', help='C++ compiler flags')
+    makefile_parser.add_argument('-L', '--link-dirs', nargs='*', help='Link directories')
+    makefile_parser.add_argument('--ldflags', nargs='*', help='Linker flags')
+    makefile_parser.add_argument('-l', '--ldlibs', nargs='*', help='Link libraries')
+    makefile_parser.add_argument('-D', '--variables', nargs='*', help='Variables (KEY=VALUE format)')
+    makefile_parser.add_argument('-t', '--targets', nargs='*', help='Targets (name:deps:recipe format)')
+    makefile_parser.add_argument('--phony', nargs='*', help='Phony target names')
+    makefile_parser.add_argument('--clean', nargs='*', help='Clean patterns/files')
+    makefile_parser.set_defaults(func=cmd_makefile)
+    
+    return parser
+
+
+def main() -> None:
+    """Main CLI entry point"""
+    parser = create_parser()
+    args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+    
+    try:
+        args.func(args)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
+    # Check if CLI arguments provided
+    if len(sys.argv) > 1:
+        main()
+    else:
+        # Run tests if no CLI arguments
+        def test_builder() -> None:
+            """Test Builder"""
+            b = Builder("product")
+            b.add_include_dirs("/opt/homebrew/include")
+            b.add_cxxflags()
+            b.add_cxxflags("-Wall", "-Wextra", "-std=c++11", "-O3")
+            b.add_ldflags("-shared", "-Wl,-rpath,/usr/local/lib", "-fPIC")
+            b.add_link_dirs("/usr/lib", "/usr/local/lib")
+            b.add_ldlibs("-lpthread")
+            b.build(dry_run=True)
 
-    def test_builder() -> None:
-        """Test Builder"""
-        b = Builder("product")
-        b.add_include_dirs("/opt/homebrew/include")
-        b.add_cxxflags()
-        b.add_cxxflags("-Wall", "-Wextra", "-std=c++11", "-O3")
-        b.add_ldflags("-shared", "-Wl,-rpath,/usr/local/lib", "-fPIC")
-        b.add_link_dirs("/usr/lib", "/usr/local/lib")
-        b.add_ldlibs("-lpthread")
-        b.build(dry_run=True)
+        def test_makefile_generator() -> None:
+            """Test MakefileGenerator"""
+            m = MakefileGenerator("Makefile")
+            m.add_var(Var("make_echos", "@echo 1", "@echo 2"))
+            m.add_variable("TEST", "test")
+            m.add_include_dirs("/opt/homebrew/include")
+            m.add_cflags("-Wall", "-Wextra")
+            m.add_cxxflags("-Wall", "-Wextra", "-std=c++11", "-O3")
+            m.add_ldflags("-shared", "-Wl,-rpath,/usr/local/lib", "-fPIC")
+            m.add_link_dirs("/usr/lib", "/usr/local/lib")
+            m.add_ldlibs("-lpthread")
+            m.add_target("all", deps=["build", "test"])
+            m.add_target("build", deps=["tool.exe"])
+            m.add_target(
+                "tool.exe",
+                "$(CXX) $(CPPFILES) $(CXXFLAGS) $(LDFLAGS) -o $@ $^",
+                deps=["a.o", "b.o"],
+            )
+            m.add_target("test", "echo $(TEST)", deps=["test.o"])
+            m.add_target("dump", "$(make_echos)")
+            m.add_phony("all", "build", "test", "dump")
+            m.add_clean("test.o", "*.o")
+            m.generate()
 
-    def test_makefile_generator() -> None:
-        """Test MakefileGenerator"""
-        m = MakefileGenerator("Makefile")
-        m.add_var(Var("make_echos", "@echo 1", "@echo 2"))
-        m.add_variable("TEST", "test")
-        m.add_include_dirs("/opt/homebrew/include")
-        m.add_cflags("-Wall", "-Wextra")
-        m.add_cxxflags("-Wall", "-Wextra", "-std=c++11", "-O3")
-        m.add_ldflags("-shared", "-Wl,-rpath,/usr/local/lib", "-fPIC")
-        m.add_link_dirs("/usr/lib", "/usr/local/lib")
-        m.add_ldlibs("-lpthread")
-        m.add_target("all", deps=["build", "test"])
-        m.add_target("build", deps=["tool.exe"])
-        m.add_target(
-            "tool.exe",
-            "$(CXX) $(CPPFILES) $(CXXFLAGS) $(LDFLAGS) -o $@ $^",
-            deps=["a.o", "b.o"],
-        )
-        m.add_target("test", "echo $(TEST)", deps=["test.o"])
-        m.add_target("dump", "$(make_echos)")
-        m.add_phony("all", "build", "test", "dump")
-        m.add_clean("test.o", "*.o")
-        m.generate()
-
-    test_builder()
-    test_makefile_generator()
+        test_builder()
+        test_makefile_generator()

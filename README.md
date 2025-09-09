@@ -1,9 +1,11 @@
 # makefilegen
 
-A Makefile generator / direct compilation tool, generalized from my work in `shedskin.makefile` in the [shedskin project](https://github.com/shedskin/shedskin), as this generic part of the code may be generally useful.
+A Makefile generator or direct compilation tool, inspired by my work on `shedskin.makefile` in the [shedskin project](https://github.com/shedskin/shedskin), designed as a general-purpose utility that may be widely useful.
 
 
 ## TODO
+
+- [ ] Add argparse-based cli interface which can generate based on recipes
 
 - [ ] Maybe use `unique_list` datastructure
 
