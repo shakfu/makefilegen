@@ -210,3 +210,10 @@ __marimo__/
 .claude
 CLAUDE.md
 
+# uv
+uv.lock
+
+# coverage
+cov_html
+
+

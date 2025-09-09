@@ -1,7 +1,7 @@
 [project]
 name = "makefilegen"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Makefile generator or direct compilation tool."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
@@ -13,4 +13,5 @@ testpaths = ["tests"]
 [dependency-groups]
 dev = [
     "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
 ]
