@@ -869,9 +869,9 @@ class MakefileGenerator:
     def _write_phony(self) -> None:
         """Write phony targets to the Makefile"""
         if self.phony:
-            phone_targets = " ".join(self.phony)
+            phony_targets = " ".join(self.phony)
             self.write()
-            self.write(f".PHONY: {phone_targets}")
+            self.write(f".PHONY: {phony_targets}")
             self.write()
 
     def _write_pattern_rules(self) -> None:
