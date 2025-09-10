@@ -33,6 +33,30 @@ VERSION = float(
     .replace("GNU Make ", "")
 )
 
+# Makefile automatic variables reference
+AUTOMATIC_VARIABLES = {
+    "$@": "The file name of the target of the rule.",
+    "$%": "The target member name, when the target is an archive member.",
+    "$<": "The name of the first prerequisite.",
+    "$?": "The names of all the prerequisites that are newer than the target, with spaces between them.",
+    "$^": "The names of all the prerequisites, with spaces between them.",
+    "$+": "This is like `$^`, but prerequisites listed more than once are duplicated in the order they were listed in the makefile.",
+    "$|": "The names of all the order-only prerequisites, with spaces between them.",
+    "$*": "The stem with which an implicit rule matches.",
+    "$(@D)": "The directory part of the file name of the target, with the trailing slash removed.",
+    "$(@F)": "The file-within-directory part of the file name of the target.",
+    "$(*D)": "The directory part of the stem.",
+    "$(*F)": "The file-within-directory part of the stem.",
+    "$(%D)": "The directory part of the target archive member name.",
+    "$(%F)": "The file-within-directory part of the target archive member name.",
+    "$(^D)": "Lists of the directory parts of all prerequisites.",
+    "$(^F)": "Lists of the file-within-directory parts of all prerequisites.",
+    "$(+D)": "Lists of the directory parts of all prerequisites, including multiple instances of duplicated prerequisites.",
+    "$(+F)": "Lists of the file-within-directory parts of all prerequisites, including multiple instances of duplicated prerequisites.",
+    "$(?D)": "Lists of the directory parts of all prerequisites that are newer than the target.",
+    "$(?F)": "Lists of the file-within-directory parts of all prerequisites that are newer than the target.",
+}
+
 
 # -----------------------------------------------------------------------------
 # utility functions]
@@ -54,6 +78,195 @@ def check_output(cmd: str) -> Optional[str]:
         return subprocess.check_output(cmd.split(), encoding="utf8").strip()
     except FileNotFoundError:
         return None
+
+
+def auto_var(var: str) -> str:
+    """Return a Makefile automatic variable"""
+    if var not in AUTOMATIC_VARIABLES:
+        raise ValueError(f"Invalid automatic variable: {var}")
+    return var
+
+
+def get_auto_var_help(var: Optional[str] = None) -> str:
+    """Get help text for automatic variables"""
+    if var:
+        if var in AUTOMATIC_VARIABLES:
+            return f"{var}: {AUTOMATIC_VARIABLES[var]}"
+        else:
+            raise ValueError(f"Invalid automatic variable: {var}")
+    
+    help_text = "Makefile Automatic Variables:\n"
+    for var_name, description in AUTOMATIC_VARIABLES.items():
+        help_text += f"  {var_name}: {description}\n"
+    return help_text
+
+
+def makefile_wildcard(*patterns: str) -> str:
+    """Generate a Makefile wildcard function call"""
+    pattern_list = " ".join(patterns)
+    return f"$(wildcard {pattern_list})"
+
+
+def makefile_patsubst(pattern: str, replacement: str, text: str) -> str:
+    """Generate a Makefile patsubst function call"""
+    return f"$(patsubst {pattern},{replacement},{text})"
+
+
+def makefile_subst(from_str: str, to_str: str, text: str) -> str:
+    """Generate a Makefile subst function call"""
+    return f"$(subst {from_str},{to_str},{text})"
+
+
+def makefile_filter(patterns: str, text: str) -> str:
+    """Generate a Makefile filter function call"""
+    return f"$(filter {patterns},{text})"
+
+
+def makefile_filter_out(patterns: str, text: str) -> str:
+    """Generate a Makefile filter-out function call"""
+    return f"$(filter-out {patterns},{text})"
+
+
+def makefile_sort(text: str) -> str:
+    """Generate a Makefile sort function call"""
+    return f"$(sort {text})"
+
+
+def makefile_word(n: int, text: str) -> str:
+    """Generate a Makefile word function call"""
+    return f"$(word {n},{text})"
+
+
+def makefile_words(text: str) -> str:
+    """Generate a Makefile words function call"""
+    return f"$(words {text})"
+
+
+def makefile_wordlist(start: int, end: int, text: str) -> str:
+    """Generate a Makefile wordlist function call"""
+    return f"$(wordlist {start},{end},{text})"
+
+
+def makefile_firstword(text: str) -> str:
+    """Generate a Makefile firstword function call"""
+    return f"$(firstword {text})"
+
+
+def makefile_lastword(text: str) -> str:
+    """Generate a Makefile lastword function call"""
+    return f"$(lastword {text})"
+
+
+def makefile_dir(names: str) -> str:
+    """Generate a Makefile dir function call"""
+    return f"$(dir {names})"
+
+
+def makefile_notdir(names: str) -> str:
+    """Generate a Makefile notdir function call"""
+    return f"$(notdir {names})"
+
+
+def makefile_suffix(names: str) -> str:
+    """Generate a Makefile suffix function call"""
+    return f"$(suffix {names})"
+
+
+def makefile_basename(names: str) -> str:
+    """Generate a Makefile basename function call"""
+    return f"$(basename {names})"
+
+
+def makefile_addsuffix(suffix: str, names: str) -> str:
+    """Generate a Makefile addsuffix function call"""
+    return f"$(addsuffix {suffix},{names})"
+
+
+def makefile_addprefix(prefix: str, names: str) -> str:
+    """Generate a Makefile addprefix function call"""
+    return f"$(addprefix {prefix},{names})"
+
+
+def makefile_join(list1: str, list2: str) -> str:
+    """Generate a Makefile join function call"""
+    return f"$(join {list1},{list2})"
+
+
+def makefile_realpath(names: str) -> str:
+    """Generate a Makefile realpath function call"""
+    return f"$(realpath {names})"
+
+
+def makefile_abspath(names: str) -> str:
+    """Generate a Makefile abspath function call"""
+    return f"$(abspath {names})"
+
+
+def makefile_if(condition: str, then_part: str, else_part: str = "") -> str:
+    """Generate a Makefile if function call"""
+    if else_part:
+        return f"$(if {condition},{then_part},{else_part})"
+    return f"$(if {condition},{then_part})"
+
+
+def makefile_or(*conditions: str) -> str:
+    """Generate a Makefile or function call"""
+    condition_list = ",".join(conditions)
+    return f"$(or {condition_list})"
+
+
+def makefile_and(*conditions: str) -> str:
+    """Generate a Makefile and function call"""
+    condition_list = ",".join(conditions)
+    return f"$(and {condition_list})"
+
+
+def makefile_foreach(var: str, list_: str, text: str) -> str:
+    """Generate a Makefile foreach function call"""
+    return f"$(foreach {var},{list_},{text})"
+
+
+def makefile_call(variable: str, *params: str) -> str:
+    """Generate a Makefile call function call"""
+    if params:
+        param_list = ",".join(params)
+        return f"$(call {variable},{param_list})"
+    return f"$(call {variable})"
+
+
+def makefile_eval(text: str) -> str:
+    """Generate a Makefile eval function call"""
+    return f"$(eval {text})"
+
+
+def makefile_origin(variable: str) -> str:
+    """Generate a Makefile origin function call"""
+    return f"$(origin {variable})"
+
+
+def makefile_flavor(variable: str) -> str:
+    """Generate a Makefile flavor function call"""
+    return f"$(flavor {variable})"
+
+
+def makefile_value(variable: str) -> str:
+    """Generate a Makefile value function call"""
+    return f"$(value {variable})"
+
+
+def makefile_shell(command: str) -> str:
+    """Generate a Makefile shell function call"""
+    return f"$(shell {command})"
+
+
+def makefile_strip(text: str) -> str:
+    """Generate a Makefile strip function call"""
+    return f"$(strip {text})"
+
+
+def makefile_findstring(find: str, text: str) -> str:
+    """Generate a Makefile findstring function call"""
+    return f"$(findstring {find},{text})"
 
 
 # -----------------------------------------------------------------------------
@@ -648,6 +861,9 @@ class MakefileGenerator:
         self.pattern_rules: UniqueList = (
             UniqueList()
         )  # pattern rules (e.g., %.o: %.cpp)
+        self.includes: UniqueList = UniqueList()  # include directives
+        self.includes_optional: UniqueList = UniqueList()  # -include directives (optional)
+        self.conditionals: UniqueList = UniqueList()  # conditional blocks (ifeq/ifneq/ifdef/ifndef)
         self.phony: UniqueList = UniqueList()  # phony targets
         self.clean: UniqueList = UniqueList()  # clean target
         # writer
@@ -800,6 +1016,59 @@ class MakefileGenerator:
             raise ValueError(f"pattern rule: '{pattern_rule}' already exists")
         self.pattern_rules.append(pattern_rule)
 
+    def add_include(self, *paths: str):
+        """Add include directives to the Makefile"""
+        for path in paths:
+            if path and path not in self.includes:
+                self.includes.append(path)
+
+    def add_include_optional(self, *paths: str):
+        """Add optional include directives (-include) to the Makefile"""
+        for path in paths:
+            if path and path not in self.includes_optional:
+                self.includes_optional.append(path)
+
+    def add_conditional(self, condition_type: str, condition: str, content: str, else_content: Optional[str] = None):
+        """Add conditional compilation block to the Makefile
+        
+        Args:
+            condition_type: 'ifeq', 'ifneq', 'ifdef', or 'ifndef'
+            condition: The condition to test (e.g., '$(CC),gcc' for ifeq)
+            content: Content to include if condition is true
+            else_content: Optional content to include if condition is false (else block)
+        """
+        valid_types = ['ifeq', 'ifneq', 'ifdef', 'ifndef']
+        if condition_type not in valid_types:
+            raise ValueError(f"condition_type must be one of {valid_types}")
+        
+        if condition_type in ['ifeq', 'ifneq']:
+            conditional_block = f"{condition_type} ({condition})\n{content}"
+        else:  # ifdef, ifndef
+            conditional_block = f"{condition_type} {condition}\n{content}"
+        
+        if else_content:
+            conditional_block += f"\nelse\n{else_content}"
+        
+        conditional_block += "\nendif"
+        
+        self.conditionals.append(conditional_block)
+
+    def add_ifeq(self, condition: str, content: str, else_content: Optional[str] = None):
+        """Add ifeq conditional block"""
+        self.add_conditional('ifeq', condition, content, else_content)
+
+    def add_ifneq(self, condition: str, content: str, else_content: Optional[str] = None):
+        """Add ifneq conditional block"""
+        self.add_conditional('ifneq', condition, content, else_content)
+
+    def add_ifdef(self, variable: str, content: str, else_content: Optional[str] = None):
+        """Add ifdef conditional block"""
+        self.add_conditional('ifdef', variable, content, else_content)
+
+    def add_ifndef(self, variable: str, content: str, else_content: Optional[str] = None):
+        """Add ifndef conditional block"""
+        self.add_conditional('ifndef', variable, content, else_content)
+
     def add_phony(self, *entries):
         """Add phony targets to the Makefile"""
         for entry in entries:
@@ -874,6 +1143,24 @@ class MakefileGenerator:
             self.write(f".PHONY: {phony_targets}")
             self.write()
 
+    def _write_includes(self) -> None:
+        """Write include directives to the Makefile"""
+        if self.includes or self.includes_optional:
+            self.write("# Include directives")
+            for include_file in self.includes:
+                self.write(f"include {include_file}")
+            for include_file in self.includes_optional:
+                self.write(f"-include {include_file}")
+            self.write()
+
+    def _write_conditionals(self) -> None:
+        """Write conditional blocks to the Makefile"""
+        if self.conditionals:
+            self.write("# Conditional blocks")
+            for conditional in self.conditionals:
+                self.write(conditional)
+                self.write()
+
     def _write_pattern_rules(self) -> None:
         """Write pattern rules to the Makefile"""
         if self.pattern_rules:
@@ -899,6 +1186,8 @@ class MakefileGenerator:
         """Generate the Makefile"""
         self._setup_defaults()
         self._write_variables()
+        self._write_includes()
+        self._write_conditionals()
         self._write_phony()
         self._write_pattern_rules()
         self._write_targets()
@@ -1031,6 +1320,26 @@ def cmd_makefile(args) -> None:
     if args.clean:
         generator.add_clean(*args.clean)
 
+    # Add include directives
+    if args.includes:
+        generator.add_include(*args.includes)
+    if args.includes_optional:
+        generator.add_include_optional(*args.includes_optional)
+
+    # Add conditional blocks
+    if args.conditionals:
+        for conditional_def in args.conditionals:
+            parts = conditional_def.split(":", 3)
+            if len(parts) < 3:
+                raise ValueError(
+                    f"Conditional must have format 'type:condition:content[:else_content]', got: {conditional_def}"
+                )
+            condition_type = parts[0].strip()
+            condition = parts[1].strip()
+            content = parts[2].strip()
+            else_content = parts[3].strip() if len(parts) > 3 and parts[3].strip() else None
+            generator.add_conditional(condition_type, condition, content, else_content)
+
     generator.generate()
     print(f"Generated Makefile: {args.output}")
 
@@ -1056,6 +1365,14 @@ Examples:
     --include-dirs /usr/local/include --ldlibs pthread \\
     --pattern-rules "%%.o:%%.cpp:$(CXX) $(CXXFLAGS) -c $< -o $@" \\
     --targets "all:build test:" --targets "build:main.o:$(CXX) -o $@ $^"
+  
+  # Generate Makefile with all new features
+  %(prog)s makefile -o Makefile \\
+    --includes "config.mk" --includes-optional "local.mk" \\
+    --conditionals "ifeq:$(CC),gcc:CFLAGS += -Wall" \\
+    --conditionals "ifdef:DEBUG:CFLAGS += -g:CFLAGS += -O2" \\
+    --variables "SOURCES=$(wildcard src/*.cpp)" \\
+    --pattern-rules "%%.o:%%.cpp:$(CXX) $(CXXFLAGS) -c $< -o $@"
 
     When using Makefile-type variables and patters via the commandline
     Escap dollars with a backslash.
@@ -1078,7 +1395,7 @@ Examples:
     bp('--ldflags', nargs='*', help='Linker flags (space-separated)')
     bp('-l', '--ldlibs', nargs='*', help='Link libraries (space-separated)')
     bp('--dry-run', action='store_true', help='Show command without executing')
-    bp.set_defaults(func=cmd_build)
+    build_parser.set_defaults(func=cmd_build)
     
     # Makefile command
     makefile_parser = subparsers.add_parser('makefile', help='Generate Makefile using MakefileGenerator')
@@ -1096,7 +1413,10 @@ Examples:
     mp('-p', '--pattern-rules', nargs='*', help='Pattern rules (target_pattern:source_pattern:recipe format)')
     mp('--phony', nargs='*', help='Phony target names')
     mp('--clean', nargs='*', help='Clean patterns/files')
-    mp.set_defaults(func=cmd_makefile)
+    mp('--includes', nargs='*', help='Include directives (file paths)')
+    mp('--includes-optional', nargs='*', help='Optional include directives (-include file paths)')
+    mp('-c', '--conditionals', nargs='*', help='Conditional blocks (type:condition:content[:else_content] format)')
+    makefile_parser.set_defaults(func=cmd_makefile)
     
     return parser
     # fmt: on

@@ -5,7 +5,10 @@ from pathlib import Path
 from makefilegen import (
     Var, SVar, IVar, CVar, AVar,
     Builder, MakefileGenerator, MakefileWriter,
-    UniqueList, PythonSystem
+    UniqueList, PythonSystem,
+    AUTOMATIC_VARIABLES, auto_var, get_auto_var_help,
+    makefile_wildcard, makefile_patsubst, makefile_subst,
+    makefile_filter, makefile_sort
 )
 
 
@@ -384,6 +387,281 @@ class TestIntegration:
         # Check phony and clean
         assert ".PHONY:" in content
         assert "clean:" in content
+
+
+class TestAutomaticVariables:
+    """Test automatic variables functionality"""
+    
+    def test_automatic_variables_constant(self):
+        """Test AUTOMATIC_VARIABLES constant is properly defined"""
+        assert isinstance(AUTOMATIC_VARIABLES, dict)
+        assert "$@" in AUTOMATIC_VARIABLES
+        assert "$<" in AUTOMATIC_VARIABLES
+        assert "$^" in AUTOMATIC_VARIABLES
+        assert "$?" in AUTOMATIC_VARIABLES
+        
+    def test_auto_var_function(self):
+        """Test auto_var function"""
+        assert auto_var("$@") == "$@"
+        assert auto_var("$<") == "$<"
+        assert auto_var("$^") == "$^"
+        
+        # Test invalid variable
+        with pytest.raises(ValueError, match="Invalid automatic variable"):
+            auto_var("$INVALID")
+            
+    def test_get_auto_var_help(self):
+        """Test get_auto_var_help function"""
+        # Test specific variable help
+        help_text = get_auto_var_help("$@")
+        assert "$@" in help_text
+        assert "target" in help_text.lower()
+        
+        # Test all variables help
+        all_help = get_auto_var_help()
+        assert "Makefile Automatic Variables:" in all_help
+        assert "$@" in all_help
+        assert "$<" in all_help
+        
+        # Test invalid variable
+        with pytest.raises(ValueError, match="Invalid automatic variable"):
+            get_auto_var_help("$INVALID")
+
+
+class TestMakefileFunctions:
+    """Test Makefile function utilities"""
+    
+    def test_makefile_wildcard(self):
+        """Test wildcard function generation"""
+        result = makefile_wildcard("*.c", "*.cpp")
+        assert result == "$(wildcard *.c *.cpp)"
+        
+        result = makefile_wildcard("src/*.c")
+        assert result == "$(wildcard src/*.c)"
+        
+    def test_makefile_patsubst(self):
+        """Test patsubst function generation"""
+        result = makefile_patsubst("%.c", "%.o", "$(SOURCES)")
+        assert result == "$(patsubst %.c,%.o,$(SOURCES))"
+        
+    def test_makefile_subst(self):
+        """Test subst function generation"""
+        result = makefile_subst(".c", ".o", "main.c util.c")
+        assert result == "$(subst .c,.o,main.c util.c)"
+        
+    def test_makefile_filter(self):
+        """Test filter function generation"""
+        result = makefile_filter("%.c", "$(FILES)")
+        assert result == "$(filter %.c,$(FILES))"
+        
+    def test_makefile_sort(self):
+        """Test sort function generation"""
+        result = makefile_sort("$(FILES)")
+        assert result == "$(sort $(FILES))"
+
+
+class TestIncludeDirectives:
+    """Test include directives functionality"""
+    
+    @pytest.fixture
+    def temp_makefile(self):
+        """Create a temporary Makefile for testing"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.mk', delete=False) as f:
+            temp_path = f.name
+        yield temp_path
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+            
+    def test_add_include(self, temp_makefile):
+        """Test adding include directives"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_include("config.mk", "deps.mk")
+        
+        assert "config.mk" in generator.includes
+        assert "deps.mk" in generator.includes
+        
+        # Test duplicates are not added
+        generator.add_include("config.mk")
+        assert list(generator.includes).count("config.mk") == 1
+        
+    def test_add_include_optional(self, temp_makefile):
+        """Test adding optional include directives"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_include_optional("optional.mk", "maybe.mk")
+        
+        assert "optional.mk" in generator.includes_optional
+        assert "maybe.mk" in generator.includes_optional
+        
+    def test_include_generation(self, temp_makefile):
+        """Test include directives in generated Makefile"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_include("config.mk")
+        generator.add_include_optional("optional.mk")
+        generator.generate()
+        
+        with open(temp_makefile, 'r') as f:
+            content = f.read()
+            
+        assert "include config.mk" in content
+        assert "-include optional.mk" in content
+        assert "# Include directives" in content
+
+
+class TestConditionalCompilation:
+    """Test conditional compilation functionality"""
+    
+    @pytest.fixture
+    def temp_makefile(self):
+        """Create a temporary Makefile for testing"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.mk', delete=False) as f:
+            temp_path = f.name
+        yield temp_path
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+            
+    def test_add_conditional_validation(self, temp_makefile):
+        """Test conditional validation"""
+        generator = MakefileGenerator(temp_makefile)
+        
+        # Test invalid condition type
+        with pytest.raises(ValueError, match="condition_type must be one of"):
+            generator.add_conditional("invalid", "condition", "content")
+            
+    def test_add_ifeq(self, temp_makefile):
+        """Test ifeq conditional"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_ifeq("$(CC),gcc", "CFLAGS += -Wall")
+        
+        assert len(generator.conditionals) == 1
+        conditional = generator.conditionals[0]
+        assert "ifeq ($(CC),gcc)" in conditional
+        assert "CFLAGS += -Wall" in conditional
+        assert "endif" in conditional
+        
+    def test_add_ifneq(self, temp_makefile):
+        """Test ifneq conditional"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_ifneq("$(DEBUG),", "CFLAGS += -DDEBUG")
+        
+        conditional = generator.conditionals[0]
+        assert "ifneq ($(DEBUG),)" in conditional
+        assert "CFLAGS += -DDEBUG" in conditional
+        
+    def test_add_ifdef(self, temp_makefile):
+        """Test ifdef conditional"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_ifdef("DEBUG", "CFLAGS += -g")
+        
+        conditional = generator.conditionals[0]
+        assert "ifdef DEBUG" in conditional
+        assert "CFLAGS += -g" in conditional
+        
+    def test_add_ifndef(self, temp_makefile):
+        """Test ifndef conditional"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_ifndef("RELEASE", "CFLAGS += -g")
+        
+        conditional = generator.conditionals[0]
+        assert "ifndef RELEASE" in conditional
+        assert "CFLAGS += -g" in conditional
+        
+    def test_conditional_with_else(self, temp_makefile):
+        """Test conditional with else block"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_ifeq("$(CC),gcc", "CFLAGS += -Wall", "CFLAGS += -w")
+        
+        conditional = generator.conditionals[0]
+        assert "ifeq ($(CC),gcc)" in conditional
+        assert "CFLAGS += -Wall" in conditional
+        assert "else" in conditional
+        assert "CFLAGS += -w" in conditional
+        assert "endif" in conditional
+        
+    def test_conditional_generation(self, temp_makefile):
+        """Test conditional blocks in generated Makefile"""
+        generator = MakefileGenerator(temp_makefile)
+        generator.add_ifeq("$(CC),gcc", "CFLAGS += -Wall")
+        generator.add_ifdef("DEBUG", "CFLAGS += -g", "CFLAGS += -O2")
+        generator.generate()
+        
+        with open(temp_makefile, 'r') as f:
+            content = f.read()
+            
+        assert "# Conditional blocks" in content
+        assert "ifeq ($(CC),gcc)" in content
+        assert "ifdef DEBUG" in content
+        assert "else" in content
+        assert "endif" in content
+
+
+class TestNewFeaturesIntegration:
+    """Integration tests for all new features"""
+    
+    @pytest.fixture
+    def temp_makefile(self):
+        """Create a temporary Makefile for testing"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.mk', delete=False) as f:
+            temp_path = f.name
+        yield temp_path
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
+            
+    def test_comprehensive_makefile_generation(self, temp_makefile):
+        """Test comprehensive Makefile with all new features"""
+        generator = MakefileGenerator(temp_makefile)
+        
+        # Add variables
+        generator.add_variable("PROJECT", "myapp")
+        generator.add_variable("SOURCES", makefile_wildcard("src/*.cpp"))
+        generator.add_variable("OBJECTS", makefile_patsubst("%.cpp", "%.o", "$(SOURCES)"))
+        
+        # Add include directives
+        generator.add_include("config.mk")
+        generator.add_include_optional("local.mk")
+        
+        # Add conditionals
+        generator.add_ifeq("$(CC),gcc", "CFLAGS += -Wall")
+        generator.add_ifdef("DEBUG", "CFLAGS += -g -DDEBUG", "CFLAGS += -O2 -DNDEBUG")
+        
+        # Add targets using automatic variables
+        generator.add_target("all", deps=["$(PROJECT)"])
+        generator.add_target("$(PROJECT)", "$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)", deps=["$(OBJECTS)"])
+        generator.add_pattern_rule("%.o", "%.cpp", "$(CXX) $(CXXFLAGS) -c $< -o $@")
+        
+        # Add phony and clean
+        generator.add_phony("all", "clean")
+        generator.add_clean("$(OBJECTS)", "$(PROJECT)")
+        
+        generator.generate()
+        
+        # Verify comprehensive content
+        with open(temp_makefile, 'r') as f:
+            content = f.read()
+            
+        # Check function calls
+        assert "$(wildcard src/*.cpp)" in content
+        assert "$(patsubst %.cpp,%.o,$(SOURCES))" in content
+        
+        # Check includes
+        assert "include config.mk" in content
+        assert "-include local.mk" in content
+        
+        # Check conditionals
+        assert "ifeq ($(CC),gcc)" in content
+        assert "ifdef DEBUG" in content
+        assert "else" in content
+        assert "endif" in content
+        
+        # Check automatic variables usage
+        assert "$@" in content
+        assert "$^" in content
+        assert "$<" in content
 
 
 # CLI Tests
